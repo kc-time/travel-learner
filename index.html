@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <title>Italiano Travel Trainer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Travel Italian · 私人版</p>
+        <h1>Italiano Trainer</h1>
+      </div>
+      <button type="button" id="resetBtn" class="ghost-btn" aria-label="重設進度">重設</button>
+    </header>
+
+    <section id="homeView" class="view active">
+      <div class="hero-card">
+        <div>
+          <span class="pill">今日 10 分鐘</span>
+          <h2>準備開始？</h2>
+          <p>10 個新字 + 舊字重溫 + 聽力 + 開咪講答案。</p>
+        </div>
+        <div class="hero-stats">
+          <div><strong id="streakStat">0</strong><span>🔥 Streak</span></div>
+          <div><strong id="masteredStat">0</strong><span>已熟字</span></div>
+          <div><strong id="weakStat">0</strong><span>錯題</span></div>
+        </div>
+      </div>
+
+      <div class="choice-grid">
+        <button id="dailyBtn" class="primary-card">
+          <span class="icon">▶</span>
+          <div><strong>開始今日課程</strong><small>系統自動揀內容</small></div>
+        </button>
+        <button id="topicBtn" class="secondary-card">
+          <span class="icon">⌘</span>
+          <div><strong>自己揀主題</strong><small>集中練餐廳、火車、問路...</small></div>
+        </button>
+      </div>
+
+      <div class="mini-grid">
+        <button id="mistakesBtn" class="mini-card"><strong>錯題本</strong><span id="mistakesCount">0 個</span></button>
+        <button id="progressBtn" class="mini-card"><strong>進度</strong><span id="progressText">0% 熟悉</span></button>
+      </div>
+    </section>
+
+    <section id="topicView" class="view">
+      <div class="section-head">
+        <button class="back-btn" data-back>←</button>
+        <div><p class="eyebrow">主題模式</p><h2>想練邊類？</h2></div>
+      </div>
+      <div id="topicGrid" class="topic-grid"></div>
+    </section>
+
+    <section id="lessonView" class="view">
+      <div class="lesson-top">
+        <button class="back-btn" data-back>←</button>
+        <div class="lesson-progress-wrap">
+          <div class="lesson-meta"><span id="lessonLabel">每日課程</span><span id="lessonCounter">1/10</span></div>
+          <div class="progress-bar"><div id="lessonProgress"></div></div>
+        </div>
+      </div>
+
+      <article class="lesson-card">
+        <div id="questionType" class="pill">新字</div>
+        <div id="visualCue" class="visual-cue">🚆</div>
+        <h2 id="promptText">binario</h2>
+        <p id="subPrompt" class="sub-prompt">月台</p>
+        <button id="speakItalianBtn" class="audio-btn">🔊 聽發音</button>
+
+        <div id="exampleBox" class="example-box">
+          <p id="exampleIt">Dov'è il binario?</p>
+          <span id="exampleZh">月台喺邊？</span>
+        </div>
+
+        <div id="answerArea" class="answer-area"></div>
+
+        <div id="feedback" class="feedback hidden"></div>
+
+        <button id="nextBtn" class="next-btn hidden">下一題</button>
+      </article>
+    </section>
+
+    <section id="mistakesView" class="view">
+      <div class="section-head">
+        <button class="back-btn" data-back>←</button>
+        <div><p class="eyebrow">自動錯題本</p><h2>集中重溫</h2></div>
+      </div>
+      <div id="mistakesList" class="list-stack"></div>
+    </section>
+
+    <section id="progressView" class="view">
+      <div class="section-head">
+        <button class="back-btn" data-back>←</button>
+        <div><p class="eyebrow">學習進度</p><h2>你記得幾多？</h2></div>
+      </div>
+      <div id="progressCards" class="list-stack"></div>
+    </section>
+
+    <section id="completeView" class="view">
+      <div class="complete-card">
+        <div class="complete-icon">🎉</div>
+        <p class="eyebrow">今日完成</p>
+        <h2 id="completeTitle">做得好</h2>
+        <div id="completeStats" class="complete-stats"></div>
+        <button id="homeBtn" class="next-btn">返首頁</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="resetModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="resetModalTitle">
+    <div class="modal-card">
+      <p id="resetModalTitle">確定重設所有學習進度？</p>
+      <p class="modal-copy">Streak、錯題本同熟悉度都會清走，呢步還原唔到。</p>
+      <div class="modal-actions">
+        <button type="button" id="cancelResetBtn" class="ghost-btn">取消</button>
+        <button type="button" id="confirmResetBtn" class="danger-btn">確定重設</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
