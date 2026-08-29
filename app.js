@@ -36,12 +36,13 @@ function refreshStreakOnComplete(){
 function refreshHome(){
   const vals = VOCAB.map(v=>itemState(v.id));
   const mastered = vals.filter(s=>s.score>=4).length;
+  const seen = vals.filter(s=>s.seen || s.score>=1).length;
   const weak = vals.filter(s=>s.wrong>0 && s.score<3).length;
   $('streakStat').textContent = appState.streak || 0;
   $('masteredStat').textContent = mastered;
   $('weakStat').textContent = weak;
   $('mistakesCount').textContent = `${weak} 個`;
-  $('progressText').textContent = `${Math.round((mastered/VOCAB.length)*100)}% 熟悉`;
+  $('progressText').textContent = `${Math.round((seen/VOCAB.length)*100)}% 已學`;
 }
 
 function buildTopics(){
@@ -61,25 +62,48 @@ function weightedDailySelection(){
   shuffle(known).forEach(v=>{if(!pick.find(x=>x.id===v.id) && pick.length<10) pick.push(v);});
   return pick.slice(0,10);
 }
+function uniqueById(list){
+  const out=[];
+  list.forEach(v=>{ if(!out.find(x=>x.id===v.id)) out.push(v); });
+  return out;
+}
+function buildQuestionQueue(pool){
+  const words = uniqueById(pool);
+  const unseen = words.filter(v=>!itemState(v.id).seen);
+  const known = words.filter(v=>itemState(v.id).seen);
+  const qs=[];
+  const intro = unseen.slice(0,4);
+  intro.forEach(v=>qs.push({item:v, type:'learn'}));
+  const quizPool = known.length || intro.length ? [...known, ...intro] : words;
+  let n=0;
+  while(qs.length<10 && quizPool.length){
+    qs.push({item: quizPool[n % quizPool.length], type: n%2===0 ? 'choice' : 'speak'});
+    n++;
+    if(n>40) break;
+  }
+  return qs.slice(0,10);
+}
+function startLesson(queue){
+  currentLesson = queue;
+  sessionStats = {correct:0, wrong:0, newWords:queue.filter(q=>q.type==='learn').length};
+  currentIndex=0; showView('lessonView'); renderQuestion();
+}
 function startDaily(){
   lessonMode='daily'; activeTopic=null;
-  currentLesson = weightedDailySelection();
-  sessionStats = {correct:0, wrong:0, newWords:currentLesson.filter(v=>!itemState(v.id).seen).length};
-  currentIndex=0; showView('lessonView'); renderQuestion();
+  startLesson(buildQuestionQueue(weightedDailySelection()));
 }
 function startTopic(topic){
   lessonMode='topic'; activeTopic=topic;
-  currentLesson = shuffle(VOCAB.filter(v=>v.topic===topic)).slice(0,10);
-  sessionStats = {correct:0, wrong:0, newWords:currentLesson.filter(v=>!itemState(v.id).seen).length};
-  currentIndex=0; showView('lessonView'); renderQuestion();
+  startLesson(buildQuestionQueue(shuffle(VOCAB.filter(v=>v.topic===topic))));
 }
 function shuffle(arr){ return [...arr].sort(()=>Math.random()-.5); }
 
 function renderQuestion(){
-  const item = currentLesson[currentIndex];
-  if(!item) return finishLesson();
+  const q = currentLesson[currentIndex];
+  if(!q) return finishLesson();
+  const item = q.item;
+  const qType = q.type;
   const s = itemState(item.id);
-  const qType = currentIndex % 3 === 0 ? 'learn' : currentIndex % 3 === 1 ? 'choice' : 'speak';
   $('lessonLabel').textContent = lessonMode==='daily' ? '每日課程' : activeTopic;
   $('lessonCounter').textContent = `${currentIndex+1}/${currentLesson.length}`;
   $('lessonProgress').style.width = `${((currentIndex)/currentLesson.length)*100}%`;
@@ -89,15 +113,16 @@ function renderQuestion(){
   $('subPrompt').textContent=item.zh;
   $('exampleIt').textContent=item.example;
   $('exampleZh').textContent=item.exZh;
-  $('speakItalianBtn').onclick=()=>speakItalian(item.example || item.it);
+  $('exampleBox').classList.toggle('hidden', qType!=='learn');
+  $('speakItalianBtn').onclick=()=>speakItalian(qType==='choice' ? item.it : (item.example || item.it));
   const area=$('answerArea'); area.innerHTML='';
 
-  if(qType==='learn' || !s.seen){
-    $('questionType').textContent='新字';
+  if(qType==='learn'){
+    $('questionType').textContent = s.seen ? '重溫' : '新字';
     area.innerHTML='<button class="next-btn" id="learnedBtn">記住，下一步</button>';
     $('learnedBtn').onclick=()=>{ s.seen=true; s.score=Math.max(1,s.score); saveState(); nextQuestion(); };
   } else if(qType==='choice') {
-    $('questionType').textContent='聽力選擇';
+    $('questionType').textContent='聽力選擇 · 舊字重溫';
     $('promptText').textContent='聽完之後揀意思'; $('subPrompt').textContent='';
     speakItalian(item.it);
     const wrongs=shuffle(VOCAB.filter(v=>v.id!==item.id)).slice(0,3);
