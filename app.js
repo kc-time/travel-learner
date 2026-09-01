@@ -177,7 +177,7 @@ function renderQuestion(){
       $('subPrompt').textContent='用意大利文講出嚟';
       setAudioControls(item, {word:false, example:false, revealExample:false});
     }
-    area.innerHTML='<button class="mic-btn" id="micBtn">🎤 按一下開始講</button><small id="speechNote" style="color:#6b7280">以聽得明為標準，不捉小文法錯。</small>';
+    area.innerHTML='<button class="mic-btn" id="micBtn">🎤 按一下開始講</button><small id="speechNote" style="color:#6b7280">請先撳一次開咪。短字認唔到或者咪有問題，之後可以撳下一題。</small>';
     $('micBtn').onclick=()=>startRecognition(item);
   }
 }
@@ -271,6 +271,7 @@ function speechFeedbackClass(tier){
   return 'bad';
 }
 function startRecognition(item){
+  $('nextBtn').classList.remove('hidden');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
     showFeedback('near','呢個 browser 暫時唔支援語音辨識。你可以當自己講咗，再撳「我講到」或「未識」。');
@@ -290,9 +291,10 @@ function startRecognition(item){
     showFeedback(speechFeedbackClass(graded.tier), `${speechHeadline(graded.tier)}<br>聽到你講：「${graded.heard||'—'}」<br>${answerLine(item)}`);
     if(!ok) speakItalian(item.it);
   };
-  rec.onerror=()=>showFeedback('near','收音唔成功。再試一次，或者檢查 Chrome 麥克風權限。');
+  rec.onerror=()=>showFeedback('near','收音唔成功。可以再講，或者撳下一題。');
   rec.onend=()=>{ if($('micBtn')){$('micBtn').textContent='🎤 再講一次';$('micBtn').disabled=false;} };
-  rec.start();
+  try { rec.start(); }
+  catch(e){ showFeedback('near','收音唔成功。可以再講，或者撳下一題。'); }
 }
 function levenshtein(a,b){
   const m=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));
