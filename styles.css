@@ -60,7 +60,9 @@ button { font: inherit; }
 .lesson-card h2 { font-size:34px; margin:8px 0; }
 .sub-prompt { color:var(--muted); font-size:18px; }
 .audio-btn, .next-btn, .mic-btn, .choice-btn { width:100%; border:0; border-radius:14px; padding:14px 16px; cursor:pointer; }
-.audio-btn { background:#f3f4f6; margin:8px 0 14px; }
+.audio-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:8px 0 14px; }
+.audio-row.single { grid-template-columns:1fr; }
+.audio-btn { background:#f3f4f6; margin:0; }
 .example-box { background:#f8fafc; border:1px solid var(--border); border-radius:16px; padding:14px; margin:10px 0 16px; text-align:left; }
 .example-box p { margin:0 0 6px; font-weight:700; }
 .example-box span { color:var(--muted); }

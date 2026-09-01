@@ -143,17 +143,17 @@ function renderQuestion(){
   $('subPrompt').textContent=item.zh;
   $('exampleIt').textContent=item.example;
   $('exampleZh').textContent=item.exZh;
-  $('exampleBox').classList.toggle('hidden', qType!=='learn');
-  $('speakItalianBtn').onclick=()=>speakItalian(qType==='choice' ? item.it : (item.example || item.it));
   const area=$('answerArea'); area.innerHTML='';
 
   if(qType==='learn'){
     $('questionType').textContent = s.seen ? '重溫' : '新字';
+    setAudioControls(item, {word:true, example:true, revealExample:true});
     area.innerHTML='<button class="next-btn" id="learnedBtn">記住，下一步</button>';
     $('learnedBtn').onclick=()=>{ s.seen=true; s.score=Math.max(1,s.score); saveState(); nextQuestion(); };
   } else if(qType==='choice') {
     $('questionType').textContent='聽力選擇 · 舊字重溫';
     $('promptText').textContent='聽完之後揀意思'; $('subPrompt').textContent='';
+    setAudioControls(item, {word:true, example:false, revealExample:false});
     speakItalian(item.it);
     const wrongs=shuffle(VOCAB.filter(v=>v.id!==item.id)).slice(0,3);
     const options=shuffle([item,...wrongs]);
@@ -165,15 +165,32 @@ function renderQuestion(){
     $('questionType').textContent='開咪講答案';
     $('promptText').textContent=item.zh;
     $('subPrompt').textContent='用意大利文講出嚟';
+    setAudioControls(item, {word:false, example:false, revealExample:false});
     area.innerHTML='<button class="mic-btn" id="micBtn">🎤 按一下開始講</button><small id="speechNote" style="color:#6b7280">以聽得明為標準，不捉小文法錯。</small>';
     $('micBtn').onclick=()=>startRecognition(item);
   }
+}
+function answerLine(item){
+  return `答案係：<strong>${item.it}</strong> — ${item.zh}`;
+}
+function setAudioControls(item, {word, example, revealExample}){
+  $('speakWordBtn').classList.toggle('hidden', !word);
+  $('speakExampleBtn').classList.toggle('hidden', !example);
+  $('audioRow').classList.toggle('hidden', !word && !example);
+  $('audioRow').classList.toggle('single', !!(word && !example));
+  $('exampleBox').classList.toggle('hidden', !revealExample);
+  if(word) $('speakWordBtn').onclick=()=>speakItalian(item.it);
+  if(example) $('speakExampleBtn').onclick=()=>speakItalian(item.example || item.it);
+}
+function revealAfterGrade(item){
+  setAudioControls(item, {word:true, example:true, revealExample:true});
 }
 function gradeChoice(btn, ok, item){
   [...document.querySelectorAll('.choice-btn')].forEach(b=>b.disabled=true);
   btn.classList.add(ok?'correct':'wrong');
   if(ok) recordResult(item,true,1); else recordResult(item,false,0);
-  showFeedback(ok?'good':'bad', ok?'啱。呢個字你聽得出。':`答案係：${item.it} — ${item.zh}`);
+  revealAfterGrade(item);
+  showFeedback(ok?'good':'bad', ok?`啱。${answerLine(item)}`:answerLine(item));
 }
 function normalize(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zà-ÿ' ]/g,' ').replace(/\s+/g,' ').trim(); }
 function keywordTokens(item){
@@ -184,8 +201,8 @@ function startRecognition(item){
   if(!SR){
     showFeedback('near','呢個 browser 暫時唔支援語音辨識。你可以當自己講咗，再撳「我講到」或「未識」。');
     $('answerArea').innerHTML='<button class="choice-btn" id="manualGood">我講到</button><button class="choice-btn" id="manualBad">未識</button>';
-    $('manualGood').onclick=()=>recordResult(item,true,1);
-    $('manualBad').onclick=()=>recordResult(item,false,0);
+    $('manualGood').onclick=()=>{ recordResult(item,true); revealAfterGrade(item); showFeedback('good', `啱。<br>${answerLine(item)}`); };
+    $('manualBad').onclick=()=>{ recordResult(item,false); revealAfterGrade(item); showFeedback('near', answerLine(item)); speakItalian(item.it); };
     return;
   }
   const rec = new SR(); rec.lang='it-IT'; rec.interimResults=false; rec.maxAlternatives=3;
@@ -197,7 +214,8 @@ function startRecognition(item){
     const near=alts.some(t=>keys.some(k=>levenshtein(t,k)<=2));
     const ok=hit||near;
     recordResult(item,ok,ok?1:0);
-    showFeedback(ok?'good':'near', ok?`聽到你講：「${alts[0]}」<br>對方應該聽得明 👍`:`聽到你講：「${alts[0]||'—'}」<br>目標：<strong>${item.it}</strong><br>再聽一次正確發音。`);
+    revealAfterGrade(item);
+    showFeedback(ok?'good':'near', ok?`聽到你講：「${alts[0]}」<br>對方應該聽得明。<br>${answerLine(item)}`:`聽到你講：「${alts[0]||'—'}」<br>${answerLine(item)}<br>再聽一次正確發音。`);
     if(!ok) speakItalian(item.it);
   };
   rec.onerror=()=>showFeedback('near','收音唔成功。再試一次，或者檢查 Chrome 麥克風權限。');
