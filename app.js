@@ -48,7 +48,7 @@ function refreshHome(){
 }
 
 function buildTopics(){
-  const icons = {'餐廳':'🍝','Café':'☕','火車':'🚆','問路':'🗺️','購物':'🛍️','付款':'💳','求助':'🆘','飲品':'🍷','酒店':'🏨','基本':'💬'};
+  const icons = {'餐廳':'🍝','Café':'☕','火車':'🚆','問路':'🗺️','購物':'🛍️','付款':'💳','求助':'🆘','飲品':'🍷','基本':'💬'};
   const topics = [...new Set(VOCAB.map(v=>v.topic))];
   $('topicGrid').innerHTML = topics.map(t=>`<button class="topic-card" data-topic="${t}"><span class="emoji">${icons[t]||'📚'}</span><strong>${t}</strong><br><span>${VOCAB.filter(v=>v.topic===t).length} 個字</span></button>`).join('');
   document.querySelectorAll('[data-topic]').forEach(btn=>btn.addEventListener('click',()=>startTopic(btn.dataset.topic)));
@@ -58,39 +58,34 @@ function weightedDailySelection(){
   const dueWeak = VOCAB.filter(v=>{const s=itemState(v.id); return s.wrong>0 && s.score<4;});
   const unseen = VOCAB.filter(v=>!itemState(v.id).seen);
   const known = VOCAB.filter(v=>itemState(v.id).seen);
-  const pick = [];
-  shuffle(dueWeak).slice(0,4).forEach(v=>pick.push(v));
-  shuffle(unseen).slice(0,10).forEach(v=>{if(!pick.find(x=>x.id===v.id) && pick.length<10) pick.push(v);});
-  shuffle(known).forEach(v=>{if(!pick.find(x=>x.id===v.id) && pick.length<10) pick.push(v);});
-  return pick.slice(0,10);
+  return uniqueById([...shuffle(dueWeak).slice(0,4), ...shuffle(unseen), ...shuffle(known)]).slice(0,10);
 }
 function uniqueById(list){
   const out=[];
   list.forEach(v=>{ if(!out.find(x=>x.id===v.id)) out.push(v); });
   return out;
 }
-function buildQuestionQueue(pool){
-  const words = uniqueById(pool);
-  const unseen = words.filter(v=>!itemState(v.id).seen);
-  const known = words.filter(v=>itemState(v.id).seen);
-  const qs=[];
-  const intro = unseen.slice(0,4);
-  intro.forEach(v=>{
-    qs.push({item:v, type:'speak', afterLearn:true});
-  });
-  const quizPool = known.length || intro.length ? [...known, ...intro] : words;
+function fillToTen(qs, pool, typeAt){
   let n=0;
-  while(qs.length<10 && quizPool.length){
-    const type = intro.length ? 'choice' : (n%2===0 ? 'choice' : 'speak');
-    qs.push({item: quizPool[n % quizPool.length], type});
+  while(qs.length<10 && pool.length){
+    qs.push({item: pool[n % pool.length], type: typeAt(n)});
     n++;
     if(n>40) break;
   }
   return qs.slice(0,10);
 }
+function buildQuestionQueue(pool){
+  const words = uniqueById(pool);
+  const unseen = words.filter(v=>!itemState(v.id).seen);
+  const known = words.filter(v=>itemState(v.id).seen);
+  const intro = unseen.slice(0,4);
+  const qs = intro.map(v=>({item:v, type:'speak', afterLearn:true}));
+  const quizPool = known.length || intro.length ? [...known, ...intro] : words;
+  return fillToTen(qs, quizPool, n => intro.length ? 'choice' : (n%2===0 ? 'choice' : 'speak'));
+}
 function startLesson(queue){
   currentLesson = queue;
-  sessionStats = {correct:0, wrong:0, newWords:queue.filter(q=>q.afterLearn || q.type==='learn').length};
+  sessionStats = {correct:0, wrong:0, newWords:queue.filter(q=>q.afterLearn).length};
   currentIndex=0; showView('lessonView'); renderQuestion();
 }
 function startDaily(){
@@ -110,20 +105,12 @@ function reviewPool(){
 function buildReviewQueue(){
   const pool = reviewPool();
   if(!pool.length) return [];
-  const take = pool.slice(0, Math.min(10, pool.length));
-  const qs=[];
-  let n=0;
-  while(qs.length<10){
-    qs.push({item: take[n % take.length], type: n%2===0 ? 'choice' : 'speak'});
-    n++;
-    if(n>40) break;
-  }
-  return qs.slice(0,10);
+  return fillToTen([], pool.slice(0,10), n => n%2===0 ? 'choice' : 'speak');
 }
 function startReview(){
   const queue = buildReviewQueue();
   if(!queue.length){
-    $('reviewEmptyModal').classList.remove('hidden');
+    openModal('reviewEmptyModal');
     return;
   }
   lessonMode='review'; activeTopic=null;
@@ -148,15 +135,10 @@ function renderQuestion(){
   $('exampleZh').textContent=item.exZh;
   const area=$('answerArea'); area.innerHTML='';
 
-  if(qType==='learn'){
-    $('questionType').textContent = s.seen ? '重溫' : '新字';
-    setAudioControls(item, {word:true, example:true, revealExample:true});
-    area.innerHTML='<button class="next-btn" id="learnedBtn">記住，下一步</button>';
-    $('learnedBtn').onclick=()=>{ s.seen=true; s.score=Math.max(1,s.score); saveState(); nextQuestion(); };
-  } else if(qType==='choice') {
+  if(qType==='choice') {
     $('questionType').textContent='聽力選擇 · 舊字重溫';
     $('promptText').textContent='聽完之後揀意思'; $('subPrompt').textContent='';
-    setAudioControls(item, {word:true, example:false, revealExample:false});
+    setAudioControls(item, {word:true, example:false});
     setTimeout(()=>speakItalian(item.it), 80);
     const wrongs=shuffle(VOCAB.filter(v=>v.id!==item.id)).slice(0,3);
     const options=shuffle([item,...wrongs]);
@@ -169,13 +151,13 @@ function renderQuestion(){
     $('questionType').textContent = teach ? '新字 · 開咪講' : '開咪講答案';
     if(teach){
       $('subPrompt').textContent='聽完，用意大利文講出嚟';
-      setAudioControls(item, {word:true, example:true, revealExample:true});
+      setAudioControls(item, {word:true, example:true});
       s.seen=true; s.score=Math.max(1,s.score); saveState();
       setTimeout(()=>speakItalian(item.it), 80);
     } else {
       $('promptText').textContent=item.zh;
       $('subPrompt').textContent='用意大利文講出嚟';
-      setAudioControls(item, {word:false, example:false, revealExample:false});
+      setAudioControls(item, {word:false, example:false});
     }
     area.innerHTML='<button class="mic-btn" id="micBtn">🎤 按一下開始講</button><small id="speechNote" style="color:#6b7280">請先撳一次開咪。短字認唔到或者咪有問題，之後可以撳下一題。</small>';
     $('micBtn').onclick=()=>startRecognition(item);
@@ -184,22 +166,22 @@ function renderQuestion(){
 function answerLine(item){
   return `答案係：<strong>${item.it}</strong> — ${item.zh}`;
 }
-function setAudioControls(item, {word, example, revealExample}){
+function setAudioControls(item, {word, example}){
   $('speakWordBtn').classList.toggle('hidden', !word);
   $('speakExampleBtn').classList.toggle('hidden', !example);
   $('audioRow').classList.toggle('hidden', !word && !example);
   $('audioRow').classList.toggle('single', !!(word && !example));
-  $('exampleBox').classList.toggle('hidden', !revealExample);
+  $('exampleBox').classList.toggle('hidden', !example);
   if(word) $('speakWordBtn').onclick=()=>speakItalian(item.it);
   if(example) $('speakExampleBtn').onclick=()=>speakItalian(item.example || item.it);
 }
 function revealAfterGrade(item){
-  setAudioControls(item, {word:true, example:true, revealExample:true});
+  setAudioControls(item, {word:true, example:true});
 }
 function gradeChoice(btn, ok, item){
   [...document.querySelectorAll('.choice-btn')].forEach(b=>b.disabled=true);
   btn.classList.add(ok?'correct':'wrong');
-  if(ok) recordResult(item,true,1); else recordResult(item,false,0);
+  recordResult(item,ok);
   revealAfterGrade(item);
   showFeedback(ok?'good':'bad', ok?`啱。${answerLine(item)}`:answerLine(item));
 }
@@ -270,14 +252,23 @@ function speechFeedbackClass(tier){
   if(tier==='partial') return 'near';
   return 'bad';
 }
+function speechMicFail(){
+  showFeedback('near','收音唔成功。可以再講，或者撳下一題。');
+}
+function finishSpeech(item, ok, cls, html, replay){
+  recordResult(item,ok);
+  revealAfterGrade(item);
+  showFeedback(cls, html);
+  if(replay) speakItalian(item.it);
+}
 function startRecognition(item){
   $('nextBtn').classList.remove('hidden');
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
     showFeedback('near','呢個 browser 暫時唔支援語音辨識。你可以當自己講咗，再撳「我講到」或「未識」。');
     $('answerArea').innerHTML='<button class="choice-btn" id="manualGood">我講到</button><button class="choice-btn" id="manualBad">未識</button>';
-    $('manualGood').onclick=()=>{ recordResult(item,true); revealAfterGrade(item); showFeedback('good', `${speechHeadline('exact')}<br>${answerLine(item)}`); };
-    $('manualBad').onclick=()=>{ recordResult(item,false); revealAfterGrade(item); showFeedback('bad', `${speechHeadline('poor')}<br>${answerLine(item)}`); speakItalian(item.it); };
+    $('manualGood').onclick=()=>finishSpeech(item,true,'good',`${speechHeadline('exact')}<br>${answerLine(item)}`);
+    $('manualBad').onclick=()=>finishSpeech(item,false,'bad',`${speechHeadline('poor')}<br>${answerLine(item)}`,true);
     return;
   }
   const rec = new SR(); rec.lang='it-IT'; rec.interimResults=false; rec.maxAlternatives=3;
@@ -286,15 +277,12 @@ function startRecognition(item){
     const alts=[...e.results[0]].map(r=>r.transcript);
     const graded=gradeSpeech(item, alts.length?alts:['']);
     const ok=speechPass(graded.tier);
-    recordResult(item,ok);
-    revealAfterGrade(item);
-    showFeedback(speechFeedbackClass(graded.tier), `${speechHeadline(graded.tier)}<br>聽到你講：「${graded.heard||'—'}」<br>${answerLine(item)}`);
-    if(!ok) speakItalian(item.it);
+    finishSpeech(item,ok,speechFeedbackClass(graded.tier), `${speechHeadline(graded.tier)}<br>聽到你講：「${graded.heard||'—'}」<br>${answerLine(item)}`, !ok);
   };
-  rec.onerror=()=>showFeedback('near','收音唔成功。可以再講，或者撳下一題。');
+  rec.onerror=speechMicFail;
   rec.onend=()=>{ if($('micBtn')){$('micBtn').textContent='🎤 再講一次';$('micBtn').disabled=false;} };
   try { rec.start(); }
-  catch(e){ showFeedback('near','收音唔成功。可以再講，或者撳下一題。'); }
+  catch(e){ speechMicFail(); }
 }
 function levenshtein(a,b){
   const m=Array.from({length:a.length+1},()=>Array(b.length+1).fill(0));
@@ -343,6 +331,7 @@ function speakItalian(text){
 function finishLesson(){
   refreshStreakOnComplete(); appState.completedSessions++; saveState();
   $('lessonProgress').style.width='100%';
+  $('completeEyebrow').textContent = lessonMode==='daily' ? '今日完成' : '練習完成';
   $('completeTitle').textContent = lessonMode==='daily' ? '今日課程完成' : lessonMode==='review' ? '重溫完成' : `${activeTopic}練習完成`;
   const leftN = lessonMode==='review' ? new Set(currentLesson.map(q=>q.item.id)).size : sessionStats.newWords;
   const leftL = lessonMode==='review' ? '重溫字' : '新字';
@@ -361,26 +350,26 @@ function renderProgress(){
 
 $('dailyBtn').onclick=startDaily;
 $('reviewBtn').onclick=startReview;
-$('reviewEmptyOk').onclick=()=>$('reviewEmptyModal').classList.add('hidden');
-$('reviewEmptyModal').addEventListener('click', (e)=>{ if(e.target.id==='reviewEmptyModal') $('reviewEmptyModal').classList.add('hidden'); });
+$('reviewEmptyOk').onclick=()=>closeModal('reviewEmptyModal');
+$('reviewEmptyModal').addEventListener('click', (e)=>{ if(e.target.id==='reviewEmptyModal') closeModal('reviewEmptyModal'); });
 $('topicBtn').onclick=()=>showView('topicView');
 $('mistakesBtn').onclick=()=>{renderMistakes();showView('mistakesView');};
 $('progressBtn').onclick=()=>{renderProgress();showView('progressView');};
 $('nextBtn').onclick=nextQuestion;
 $('homeBtn').onclick=()=>showView('homeView');
-function openResetModal(){ $('resetModal').classList.remove('hidden'); }
-function closeResetModal(){ $('resetModal').classList.add('hidden'); }
+function openModal(id){ $(id).classList.remove('hidden'); }
+function closeModal(id){ $(id).classList.add('hidden'); }
 function resetProgress(){
   localStorage.removeItem(stateKey);
   appState=loadState();
-  closeResetModal();
+  closeModal('resetModal');
   showView('homeView');
   refreshHome();
 }
-$('resetBtn').onclick=openResetModal;
-$('cancelResetBtn').onclick=closeResetModal;
+$('resetBtn').onclick=()=>openModal('resetModal');
+$('cancelResetBtn').onclick=()=>closeModal('resetModal');
 $('confirmResetBtn').onclick=resetProgress;
-$('resetModal').addEventListener('click', (e)=>{ if(e.target.id==='resetModal') closeResetModal(); });
+$('resetModal').addEventListener('click', (e)=>{ if(e.target.id==='resetModal') closeModal('resetModal'); });
 document.querySelectorAll('[data-back]').forEach(b=>b.onclick=()=>showView('homeView'));
 
 buildTopics(); refreshHome();
