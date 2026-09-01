@@ -36,6 +36,10 @@
           <span class="icon">▶</span>
           <div><strong>開始今日課程</strong><small>系統自動揀內容</small></div>
         </button>
+        <button type="button" id="reviewBtn" class="review-card">
+          <span class="icon">↺</span>
+          <div><strong>重溫舊字</strong><small id="reviewHint">只練聽力同開咪尸</small></div>
+        </button>
         <button id="topicBtn" class="secondary-card">
           <span class="icon">⌘</span>
           <div><strong>自己揀主題</strong><small>集中練餐廳、火車、問路...</small></div>
@@ -119,6 +123,16 @@
       <div class="modal-actions">
         <button type="button" id="cancelResetBtn" class="ghost-btn">取消</button>
         <button type="button" id="confirmResetBtn" class="danger-btn">確定重設</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="reviewEmptyModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <p>暫時未有舊字可以重溫</p>
+      <p class="modal-copy">先做一課「今日課程」，記住幾個新字之後，就可以專練聽力同開咪。</p>
+      <div class="modal-actions">
+        <button type="button" id="reviewEmptyOk" class="next-btn">知道</button>
       </div>
     </div>
   </div>

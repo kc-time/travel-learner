@@ -43,6 +43,8 @@ function refreshHome(){
   $('weakStat').textContent = weak;
   $('mistakesCount').textContent = `${weak} 個`;
   $('progressText').textContent = `${Math.round((seen/VOCAB.length)*100)}% 已學`;
+  $('reviewHint').textContent = seen ? `${seen} 個舊字 · 只練聽力同開咪` : '未有舊字，先做今日課程';
+  $('reviewBtn').disabled = seen===0;
 }
 
 function buildTopics(){
@@ -96,6 +98,34 @@ function startTopic(topic){
   lessonMode='topic'; activeTopic=topic;
   startLesson(buildQuestionQueue(shuffle(VOCAB.filter(v=>v.topic===topic))));
 }
+function reviewPool(){
+  const known = VOCAB.filter(v=>itemState(v.id).seen);
+  const weak = known.filter(v=>{ const s=itemState(v.id); return s.wrong>0 || s.score<4; });
+  const rest = known.filter(v=>!weak.find(x=>x.id===v.id));
+  return uniqueById([...shuffle(weak), ...shuffle(rest)]);
+}
+function buildReviewQueue(){
+  const pool = reviewPool();
+  if(!pool.length) return [];
+  const take = pool.slice(0, Math.min(10, pool.length));
+  const qs=[];
+  let n=0;
+  while(qs.length<10){
+    qs.push({item: take[n % take.length], type: n%2===0 ? 'choice' : 'speak'});
+    n++;
+    if(n>40) break;
+  }
+  return qs.slice(0,10);
+}
+function startReview(){
+  const queue = buildReviewQueue();
+  if(!queue.length){
+    $('reviewEmptyModal').classList.remove('hidden');
+    return;
+  }
+  lessonMode='review'; activeTopic=null;
+  startLesson(queue);
+}
 function shuffle(arr){ return [...arr].sort(()=>Math.random()-.5); }
 
 function renderQuestion(){
@@ -104,7 +134,7 @@ function renderQuestion(){
   const item = q.item;
   const qType = q.type;
   const s = itemState(item.id);
-  $('lessonLabel').textContent = lessonMode==='daily' ? '每日課程' : activeTopic;
+  $('lessonLabel').textContent = lessonMode==='daily' ? '每日課程' : lessonMode==='review' ? '舊字重溫' : activeTopic;
   $('lessonCounter').textContent = `${currentIndex+1}/${currentLesson.length}`;
   $('lessonProgress').style.width = `${((currentIndex)/currentLesson.length)*100}%`;
   $('feedback').className='feedback hidden'; $('feedback').innerHTML=''; $('nextBtn').classList.add('hidden');
@@ -202,8 +232,10 @@ function speakItalian(text){
 function finishLesson(){
   refreshStreakOnComplete(); appState.completedSessions++; saveState();
   $('lessonProgress').style.width='100%';
-  $('completeTitle').textContent = lessonMode==='daily' ? '今日課程完成' : `${activeTopic}練習完成`;
-  $('completeStats').innerHTML=`<div><strong>${sessionStats.newWords}</strong><span>新字</span></div><div><strong>${sessionStats.correct}</strong><span>答啱</span></div><div><strong>${sessionStats.wrong}</strong><span>要再練</span></div>`;
+  $('completeTitle').textContent = lessonMode==='daily' ? '今日課程完成' : lessonMode==='review' ? '重溫完成' : `${activeTopic}練習完成`;
+  const leftN = lessonMode==='review' ? new Set(currentLesson.map(q=>q.item.id)).size : sessionStats.newWords;
+  const leftL = lessonMode==='review' ? '重溫字' : '新字';
+  $('completeStats').innerHTML=`<div><strong>${leftN}</strong><span>${leftL}</span></div><div><strong>${sessionStats.correct}</strong><span>答啱</span></div><div><strong>${sessionStats.wrong}</strong><span>要再練</span></div>`;
   showView('completeView');
 }
 function renderMistakes(){
@@ -217,6 +249,9 @@ function renderProgress(){
 }
 
 $('dailyBtn').onclick=startDaily;
+$('reviewBtn').onclick=startReview;
+$('reviewEmptyOk').onclick=()=>$('reviewEmptyModal').classList.add('hidden');
+$('reviewEmptyModal').addEventListener('click', (e)=>{ if(e.target.id==='reviewEmptyModal') $('reviewEmptyModal').classList.add('hidden'); });
 $('topicBtn').onclick=()=>showView('topicView');
 $('mistakesBtn').onclick=()=>{renderMistakes();showView('mistakesView');};
 $('progressBtn').onclick=()=>{renderProgress();showView('progressView');};
