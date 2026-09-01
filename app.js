@@ -76,7 +76,6 @@ function buildQuestionQueue(pool){
   const qs=[];
   const intro = unseen.slice(0,4);
   intro.forEach(v=>{
-    qs.push({item:v, type:'learn'});
     qs.push({item:v, type:'speak', afterLearn:true});
   });
   const quizPool = known.length || intro.length ? [...known, ...intro] : words;
@@ -91,7 +90,7 @@ function buildQuestionQueue(pool){
 }
 function startLesson(queue){
   currentLesson = queue;
-  sessionStats = {correct:0, wrong:0, newWords:queue.filter(q=>q.type==='learn').length};
+  sessionStats = {correct:0, wrong:0, newWords:queue.filter(q=>q.afterLearn || q.type==='learn').length};
   currentIndex=0; showView('lessonView'); renderQuestion();
 }
 function startDaily(){
@@ -166,10 +165,18 @@ function renderQuestion(){
       b.onclick=()=>gradeChoice(b,opt.id===item.id,item); area.appendChild(b);
     });
   } else {
-    $('questionType').textContent = q.afterLearn ? '開咪講答案 · 新字' : '開咪講答案';
-    $('promptText').textContent=item.zh;
-    $('subPrompt').textContent='用意大利文講出嚟';
-    setAudioControls(item, {word:false, example:false, revealExample:false});
+    const teach = !!q.afterLearn;
+    $('questionType').textContent = teach ? '新字 · 開咪講' : '開咪講答案';
+    if(teach){
+      $('subPrompt').textContent='聽完，用意大利文講出嚟';
+      setAudioControls(item, {word:true, example:true, revealExample:true});
+      s.seen=true; s.score=Math.max(1,s.score); saveState();
+      setTimeout(()=>speakItalian(item.it), 80);
+    } else {
+      $('promptText').textContent=item.zh;
+      $('subPrompt').textContent='用意大利文講出嚟';
+      setAudioControls(item, {word:false, example:false, revealExample:false});
+    }
     area.innerHTML='<button class="mic-btn" id="micBtn">🎤 按一下開始講</button><small id="speechNote" style="color:#6b7280">以聽得明為標準，不捉小文法錯。</small>';
     $('micBtn').onclick=()=>startRecognition(item);
   }
