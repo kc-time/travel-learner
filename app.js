@@ -75,11 +75,15 @@ function buildQuestionQueue(pool){
   const known = words.filter(v=>itemState(v.id).seen);
   const qs=[];
   const intro = unseen.slice(0,4);
-  intro.forEach(v=>qs.push({item:v, type:'learn'}));
+  intro.forEach(v=>{
+    qs.push({item:v, type:'learn'});
+    qs.push({item:v, type:'speak', afterLearn:true});
+  });
   const quizPool = known.length || intro.length ? [...known, ...intro] : words;
   let n=0;
   while(qs.length<10 && quizPool.length){
-    qs.push({item: quizPool[n % quizPool.length], type: n%2===0 ? 'choice' : 'speak'});
+    const type = intro.length ? 'choice' : (n%2===0 ? 'choice' : 'speak');
+    qs.push({item: quizPool[n % quizPool.length], type});
     n++;
     if(n>40) break;
   }
@@ -154,7 +158,7 @@ function renderQuestion(){
     $('questionType').textContent='聽力選擇 · 舊字重溫';
     $('promptText').textContent='聽完之後揀意思'; $('subPrompt').textContent='';
     setAudioControls(item, {word:true, example:false, revealExample:false});
-    speakItalian(item.it);
+    setTimeout(()=>speakItalian(item.it), 80);
     const wrongs=shuffle(VOCAB.filter(v=>v.id!==item.id)).slice(0,3);
     const options=shuffle([item,...wrongs]);
     options.forEach(opt=>{
@@ -162,7 +166,7 @@ function renderQuestion(){
       b.onclick=()=>gradeChoice(b,opt.id===item.id,item); area.appendChild(b);
     });
   } else {
-    $('questionType').textContent='開咪講答案';
+    $('questionType').textContent = q.afterLearn ? '開咪講答案 · 新字' : '開咪講答案';
     $('promptText').textContent=item.zh;
     $('subPrompt').textContent='用意大利文講出嚟';
     setAudioControls(item, {word:false, example:false, revealExample:false});
@@ -192,30 +196,91 @@ function gradeChoice(btn, ok, item){
   revealAfterGrade(item);
   showFeedback(ok?'good':'bad', ok?`啱。${answerLine(item)}`:answerLine(item));
 }
-function normalize(s){ return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zà-ÿ' ]/g,' ').replace(/\s+/g,' ').trim(); }
-function keywordTokens(item){
-  return normalize(item.it).split(' ').filter(x=>x.length>2 && !['per','con','una','uno','il','la','lo','un'].includes(x));
+function normalize(s){
+  return (s||'')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .replace(/[''`´]/g,'')
+    .replace(/[^a-z]+/g,' ')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function compact(s){ return normalize(s).replace(/\s+/g,''); }
+function contentTokens(s){
+  const stops = new Set(['per','con','una','uno','il','la','lo','le','gli','un','di','a','da','in','su','e','o','che','mi','ti','si','ci','vi']);
+  return normalize(s).split(' ').filter(x=>x.length>1 && !stops.has(x));
+}
+function similarity(a,b){
+  if(!a && !b) return 1;
+  if(!a || !b) return 0;
+  return 1 - levenshtein(a,b)/Math.max(a.length,b.length);
+}
+function tokenHits(heardTokens, key){
+  return heardTokens.some(h=>h===key || h.includes(key) || key.includes(h) || levenshtein(h,key)<=Math.min(2, Math.floor(key.length/3)||1));
+}
+function gradeSpeech(item, transcripts){
+  const rank = {exact:5, strong:4, ok:3, partial:2, poor:1};
+  let best = {tier:'poor', score:0, heard: transcripts[0]||''};
+  transcripts.forEach(raw=>{
+    const heard = normalize(raw);
+    const heardC = compact(raw);
+    const heardKeys = contentTokens(raw);
+    if(!heard) return;
+    [item.it, item.example].filter(Boolean).forEach((targetRaw, ti)=>{
+      const target = normalize(targetRaw);
+      const targetC = compact(targetRaw);
+      const tKeys = contentTokens(targetRaw);
+      const sim = Math.max(similarity(heard,target), similarity(heardC,targetC));
+      const matched = tKeys.filter(k=>tokenHits(heardKeys,k));
+      const keyRatio = tKeys.length ? matched.length/tKeys.length : 0;
+      const exactMatch = heard===target || heardC===targetC || sim>=0.92;
+      const contained = !exactMatch && !!(target && (heard.includes(target) || heardC.includes(targetC)));
+      let tier = 'poor';
+      if(exactMatch) tier = 'exact';
+      else if(sim>=0.80 || keyRatio>=0.9 || (tKeys.length && matched.length===tKeys.length) || contained)
+        tier = 'strong';
+      else if(keyRatio>=0.65) tier = 'ok';
+      else if(matched.length>=1) tier = 'partial';
+      const score = sim + (ti===0 ? 0.001 : 0);
+      if(rank[tier]>rank[best.tier] || (rank[tier]===rank[best.tier] && score>best.score))
+        best = {tier, score, heard:raw};
+    });
+  });
+  return best;
+}
+function speechPass(tier){ return tier==='exact' || tier==='strong' || tier==='ok'; }
+function speechHeadline(tier){
+  if(tier==='exact') return '講得好！✅<br>完全正確';
+  if(tier==='strong') return '好接近 👍';
+  if(tier==='ok') return '對方聽得明 👍';
+  if(tier==='partial') return '有啱一部分，再試一次 💪';
+  return '未熟，聽一次再試';
+}
+function speechFeedbackClass(tier){
+  if(tier==='exact' || tier==='strong') return 'good';
+  if(tier==='ok') return 'near';
+  if(tier==='partial') return 'near';
+  return 'bad';
 }
 function startRecognition(item){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
     showFeedback('near','呢個 browser 暫時唔支援語音辨識。你可以當自己講咗，再撳「我講到」或「未識」。');
     $('answerArea').innerHTML='<button class="choice-btn" id="manualGood">我講到</button><button class="choice-btn" id="manualBad">未識</button>';
-    $('manualGood').onclick=()=>{ recordResult(item,true); revealAfterGrade(item); showFeedback('good', `啱。<br>${answerLine(item)}`); };
-    $('manualBad').onclick=()=>{ recordResult(item,false); revealAfterGrade(item); showFeedback('near', answerLine(item)); speakItalian(item.it); };
+    $('manualGood').onclick=()=>{ recordResult(item,true); revealAfterGrade(item); showFeedback('good', `${speechHeadline('exact')}<br>${answerLine(item)}`); };
+    $('manualBad').onclick=()=>{ recordResult(item,false); revealAfterGrade(item); showFeedback('bad', `${speechHeadline('poor')}<br>${answerLine(item)}`); speakItalian(item.it); };
     return;
   }
   const rec = new SR(); rec.lang='it-IT'; rec.interimResults=false; rec.maxAlternatives=3;
   $('micBtn').textContent='🎙️ 聽緊...'; $('micBtn').disabled=true;
   rec.onresult=(e)=>{
-    const alts=[...e.results[0]].map(r=>normalize(r.transcript));
-    const keys=keywordTokens(item);
-    const hit=alts.some(t=>keys.every(k=>t.includes(k)) || keys.some(k=>t.includes(k)));
-    const near=alts.some(t=>keys.some(k=>levenshtein(t,k)<=2));
-    const ok=hit||near;
-    recordResult(item,ok,ok?1:0);
+    const alts=[...e.results[0]].map(r=>r.transcript);
+    const graded=gradeSpeech(item, alts.length?alts:['']);
+    const ok=speechPass(graded.tier);
+    recordResult(item,ok);
     revealAfterGrade(item);
-    showFeedback(ok?'good':'near', ok?`聽到你講：「${alts[0]}」<br>對方應該聽得明。<br>${answerLine(item)}`:`聽到你講：「${alts[0]||'—'}」<br>${answerLine(item)}<br>再聽一次正確發音。`);
+    showFeedback(speechFeedbackClass(graded.tier), `${speechHeadline(graded.tier)}<br>聽到你講：「${graded.heard||'—'}」<br>${answerLine(item)}`);
     if(!ok) speakItalian(item.it);
   };
   rec.onerror=()=>showFeedback('near','收音唔成功。再試一次，或者檢查 Chrome 麥克風權限。');
@@ -240,12 +305,31 @@ function showFeedback(type, html){
   $('nextBtn').classList.remove('hidden');
 }
 function nextQuestion(){ currentIndex++; renderQuestion(); }
+let speakTimer = null;
 function speakItalian(text){
-  if(!('speechSynthesis' in window)) return;
-  speechSynthesis.cancel();
-  const u=new SpeechSynthesisUtterance(text); u.lang='it-IT'; u.rate=.9;
-  const voices=speechSynthesis.getVoices(); const it=voices.find(v=>v.lang?.toLowerCase().startsWith('it'));
-  if(it) u.voice=it; speechSynthesis.speak(u);
+  if(!('speechSynthesis' in window) || !text) return;
+  const play = () => {
+    clearTimeout(speakTimer);
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'it-IT';
+    u.rate = 0.9;
+    const it = speechSynthesis.getVoices().find(v => (v.lang||'').toLowerCase().startsWith('it'));
+    if(it) u.voice = it;
+    const kick = () => {
+      try { speechSynthesis.resume(); } catch(e) {}
+      speechSynthesis.speak(u);
+    };
+    if(speechSynthesis.speaking || speechSynthesis.pending){
+      speechSynthesis.cancel();
+      speakTimer = setTimeout(kick, 80);
+    } else {
+      kick();
+    }
+  };
+  play();
+  if(!speechSynthesis.getVoices().length){
+    speechSynthesis.addEventListener('voiceschanged', play, {once:true});
+  }
 }
 function finishLesson(){
   refreshStreakOnComplete(); appState.completedSessions++; saveState();
